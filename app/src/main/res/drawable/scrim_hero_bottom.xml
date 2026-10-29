@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Fades the hero image INTO the page: transparent at top, fully opaque
+     bg at the bottom edge so there is no visible seam against @color/bg. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="270"
+        android:centerY="0.55"
+        android:startColor="@color/scrim_faint"
+        android:centerColor="@color/scrim_mid"
+        android:endColor="@color/scrim_solid" />
+</shape>

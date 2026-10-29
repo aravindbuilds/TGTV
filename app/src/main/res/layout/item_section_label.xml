@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:fontFamily="@font/bebas_neue_regular"
+    android:letterSpacing="0.04"
+    android:paddingStart="20dp"
+    android:paddingTop="26dp"
+    android:paddingEnd="20dp"
+    android:textColor="@color/text_primary"
+    android:textSize="24sp" />

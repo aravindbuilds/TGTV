@@ -1,0 +1,26 @@
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+build/
+/captures
+.externalNativeBuild
+.cxx
+*.apk
+*.aab
+
+# Build-time secrets (TDLib api_id/api_hash, OpenSubtitles key) - never commit
+secrets.properties
+tgtv-secrets.properties
+
+# Signing keys - never commit
+*.jks
+*.keystore
+keystore.properties
+
+# Local tooling
+.kotlin/
+.claude/
+.agents/
+skills-lock.json

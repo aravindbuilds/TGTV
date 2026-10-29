@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.cardview.widget.CardView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="5dp"
+    app:cardBackgroundColor="@color/surface"
+    app:cardCornerRadius="18dp"
+    app:cardElevation="3dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="168dp">
+
+            <ImageView
+                android:id="@+id/thumb"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@color/surface_high"
+                android:scaleType="centerCrop" />
+
+            <View
+                android:layout_width="match_parent"
+                android:layout_height="52dp"
+                android:layout_gravity="bottom"
+                android:background="@drawable/scrim_card_bottom" />
+
+            <!-- TMDB rating badge, hidden until metadata arrives -->
+            <TextView
+                android:id="@+id/ratingBadge"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="start|top"
+                android:layout_margin="6dp"
+                android:background="@drawable/bg_badge"
+                android:paddingStart="7dp"
+                android:paddingTop="3dp"
+                android:paddingEnd="7dp"
+                android:paddingBottom="3dp"
+                android:textColor="@color/star"
+                android:textSize="10sp"
+                android:textStyle="bold"
+                android:visibility="gone" />
+
+            <!-- Watch progress (hidden when unwatched) -->
+            <ProgressBar
+                android:id="@+id/cardProgress"
+                style="?android:attr/progressBarStyleHorizontal"
+                android:layout_width="match_parent"
+                android:layout_height="3dp"
+                android:layout_gravity="bottom"
+                android:max="1000"
+                android:progressBackgroundTint="#55FFFFFF"
+                android:progressTint="@color/accent"
+                android:visibility="gone" />
+
+            <!-- My List toggle, like the reference poster hearts -->
+            <ImageButton
+                android:id="@+id/btnList"
+                android:layout_width="32dp"
+                android:layout_height="32dp"
+                android:layout_gravity="end|top"
+                android:layout_margin="6dp"
+                android:background="@drawable/bg_fab_dark"
+                android:contentDescription="My List"
+                android:padding="7dp"
+                android:src="@drawable/ic_heart" />
+        </FrameLayout>
+
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:paddingStart="9dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="9dp"
+            android:textColor="@color/text_primary"
+            android:textSize="12sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:id="@+id/meta"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:paddingStart="9dp"
+            android:paddingTop="3dp"
+            android:paddingEnd="9dp"
+            android:paddingBottom="10dp"
+            android:textColor="@color/text_secondary"
+            android:textSize="10sp" />
+    </LinearLayout>
+</androidx.cardview.widget.CardView>

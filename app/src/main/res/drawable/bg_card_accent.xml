@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Account hero card: deep red gradient, rounded. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <gradient
+        android:angle="135"
+        android:startColor="#FFE8353E"
+        android:endColor="#FF9E1B22" />
+    <corners android:radius="22dp" />
+</shape>

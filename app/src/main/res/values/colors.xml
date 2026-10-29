@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Slate-dark palette (see reference: soft charcoal-blue surfaces + red accent) -->
+    <color name="bg">#FF171B23</color>
+    <color name="surface">#FF222835</color>
+    <color name="surface_high">#FF2B3242</color>
+    <color name="stroke">#FF333B4C</color>
+
+    <color name="accent">#FFE8353E</color>
+    <color name="accent_pressed">#FFC2282F</color>
+
+    <color name="text_primary">#FFFFFFFF</color>
+    <color name="text_secondary">#FF9BA5B8</color>
+    <color name="text_hint">#FF68707F</color>
+    <color name="star">#FFF5C518</color>
+
+    <!-- Scrim gradients. scrim_solid is fully opaque bg so hero scrims melt into the page. -->
+    <color name="scrim_solid">#FF171B23</color>
+    <color name="scrim_mid">#B3171B23</color>
+    <color name="scrim_faint">#33171B23</color>
+
+    <!-- Kept for compatibility with older references -->
+    <color name="nd_background">#FF171B23</color>
+    <color name="card_bg">#FF222835</color>
+    <color name="ic_launcher_bg">#FF05070F</color>
+</resources>

@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Softens the hero's top edge: opaque bg under the status bar melting
+     into the image below. -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+    <gradient
+        android:angle="270"
+        android:startColor="@color/scrim_solid"
+        android:endColor="#00171B23" />
+</shape>

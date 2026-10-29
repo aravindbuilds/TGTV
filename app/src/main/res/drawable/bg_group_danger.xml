@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Danger-tinted rounded container (sign out). -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#1AE8353E" />
+    <corners android:radius="22dp" />
+</shape>

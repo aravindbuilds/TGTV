@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@android:color/black">
+
+    <androidx.media3.ui.PlayerView
+        android:id="@+id/playerView"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        app:show_buffering="always"
+        app:show_shuffle_button="false"
+        android:focusable="true"
+        android:focusableInTouchMode="true" />
+
+    <TextView
+        android:id="@+id/playerError"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:textColor="#FFFF6666"
+        android:textSize="18sp"
+        android:visibility="gone" />
+
+    <!-- Gesture feedback (seek / brightness / volume / speed) -->
+    <TextView
+        android:id="@+id/gestureHud"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_hud"
+        android:paddingStart="22dp"
+        android:paddingTop="12dp"
+        android:paddingEnd="22dp"
+        android:paddingBottom="12dp"
+        android:textColor="@color/text_primary"
+        android:textSize="18sp"
+        android:textStyle="bold"
+        android:visibility="gone" />
+
+    <!-- Player-side controls: aspect ratio + subtitles, top-right. Hidden and
+         shown together with the playback controls (never burned in). -->
+    <LinearLayout
+        android:id="@+id/playerOverlay"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="14dp"
+        android:layout_marginEnd="14dp"
+        android:orientation="vertical">
+
+        <ImageButton
+            android:id="@+id/btnRatio"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:background="@drawable/bg_circle_dark"
+            android:contentDescription="Aspect ratio"
+            android:src="@drawable/ic_ratio"
+            app:tint="@color/text_primary" />
+
+        <TextView
+            android:id="@+id/btnSpeed"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_circle_dark"
+            android:contentDescription="Playback speed"
+            android:gravity="center"
+            android:text="1x"
+            android:textColor="@color/text_primary"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+
+        <ImageButton
+            android:id="@+id/btnSubs"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_circle_dark"
+            android:contentDescription="Subtitles"
+            android:src="@drawable/ic_cc"
+            app:tint="@color/text_primary" />
+    </LinearLayout>
+</FrameLayout>

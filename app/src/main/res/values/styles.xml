@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Bottom nav label -->
+    <style name="NavLabel" parent="TextAppearance.MaterialComponents.Caption">
+        <item name="android:textSize">11sp</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <!-- Pill-shaped active indicator behind the selected icon -->
+    <style name="NavIndicator" parent="Widget.Material3.BottomNavigationView.ActiveIndicator">
+        <item name="android:color">#2EE8353E</item>
+        <item name="shapeAppearanceOverlay">@style/NavIndicatorShape</item>
+    </style>
+
+    <style name="NavIndicatorShape">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">14dp</item>
+    </style>
+
+    <!-- Primary pill button -->
+    <style name="PillButton" parent="Widget.AppCompat.Button.Borderless">
+        <item name="android:background">@drawable/bg_btn_red</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">50dp</item>
+        <item name="android:paddingStart">20dp</item>
+        <item name="android:paddingEnd">20dp</item>
+    </style>
+
+    <!-- Secondary pill button -->
+    <style name="PillButtonDark" parent="PillButton">
+        <item name="android:background">@drawable/bg_btn_dark</item>
+    </style>
+</resources>

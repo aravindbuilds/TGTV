@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Hero: featured video backdrop + big red play. Lives inside the grid as
+     its first item, so it scrolls away with the list and back with it. -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/heroArea"
+    android:layout_width="match_parent"
+    android:layout_height="440dp"
+    android:layout_marginStart="-14dp"
+    android:layout_marginEnd="-14dp">
+
+    <ImageView
+        android:id="@+id/heroImage"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@color/surface"
+        android:scaleType="centerCrop" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@drawable/scrim_hero_bottom" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="130dp"
+        android:layout_gravity="top"
+        android:background="@drawable/scrim_top" />
+
+    <!-- Watch banner: red play button + title -->
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom"
+        android:gravity="center_horizontal"
+        android:orientation="vertical"
+        android:paddingStart="28dp"
+        android:paddingEnd="28dp"
+        android:paddingBottom="34dp">
+
+        <!-- Watch banner: poster logo (falls back to the text name in the
+             poster font), then the big red play. -->
+        <ImageView
+            android:id="@+id/heroLogo"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginBottom="20dp"
+            android:adjustViewBounds="true"
+            android:contentDescription="Title artwork"
+            android:maxHeight="110dp"
+            android:maxWidth="320dp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/btnPlayHero"
+            android:layout_width="64dp"
+            android:layout_height="64dp"
+            android:layout_gravity="center_horizontal"
+            android:layout_marginTop="10dp"
+            android:background="@drawable/bg_fab_red"
+            android:clickable="true"
+            android:elevation="8dp"
+            android:focusable="true"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="28dp"
+                android:layout_height="28dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_play" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/heroTitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="18dp"
+            android:ellipsize="end"
+            android:fontFamily="@font/bebas_neue_regular"
+            android:gravity="center"
+            android:maxLines="2"
+            android:lineSpacingExtra="2dp"
+            android:shadowColor="#B3000000"
+            android:shadowDy="2"
+            android:shadowRadius="10"
+            android:textColor="@color/text_primary"
+            android:textSize="34sp" />
+
+        <!-- Movie/episode summary straight after the play button -->
+        <TextView
+            android:id="@+id/heroOverview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:lineSpacingExtra="4dp"
+            android:maxLines="3"
+            android:shadowColor="#B3000000"
+            android:shadowDy="1"
+            android:shadowRadius="6"
+            android:textColor="@color/text_secondary"
+            android:textSize="13sp"
+            android:visibility="gone" />
+    </LinearLayout>
+</FrameLayout>
