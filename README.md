@@ -9,6 +9,16 @@ TGTV is an Android app that streams videos straight from your own Telegram chats
 
 Brought to you by the maker of [TelegramVideoTV](https://github.com/aravindbuilds/TelegramVideoTV) — the Android TV edition. TGTV is the phone companion with the same DNA: private, fast, and Netflix-simple.
 
+## 📸 Screenshots
+
+<p align="center">
+  <img src="art/screenshots/home.jpg" width="240" alt="Home - Continue Watching and hero banner"/>
+  <img src="art/screenshots/library.jpg" width="240" alt="My Library grid"/>
+  <img src="art/screenshots/details.jpg" width="240" alt="Title details with resume"/>
+</p>
+
+<p align="center"><i>Cinematic hero · Flat library grid · Details with resume &amp; restart</i></p>
+
 ---
 
 ## ✨ Features
