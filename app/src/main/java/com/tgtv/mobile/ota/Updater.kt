@@ -34,6 +34,86 @@ object Updater {
 
     private const val LATEST_URL = "https://api.github.com/repos/$REPO/releases/latest"
 
+    /**
+     * Bounded DNS: InetAddress lookups have no timeout of their own and can
+     * hang for minutes on some networks/emulators, which defeats OkHttp's
+     * connect timeout and coroutine cancellation alike. Each lookup gets a
+     * hard 5s deadline; past that we fail the request fast so the update
+     * check can report failure and retry.
+     */
+    private val dnsExecutor = java.util.concurrent.Executors.newFixedThreadPool(4) { r ->
+        Thread(r, "tgtx-dns").apply { isDaemon = true }
+    }
+
+    /** DNS-over-HTTPS answers, cached 5 minutes per hostname. */
+    private val dnsCache =
+        java.util.concurrent.ConcurrentHashMap<String, Pair<Long, List<java.net.InetAddress>>>()
+
+    /**
+     * Pinned to Cloudflare 1.1.1.1 BY IP - the TLS cert covers the bare
+     * address and no OS resolver is involved, so this works even when the
+     * system DNS is wedged (a classic emulator stall). Fully covered by
+     * timeouts, unlike getaddrinfo which cannot be interrupted.
+     */
+    private val dohClient = OkHttpClient.Builder()
+        .connectTimeout(4, TimeUnit.SECONDS)
+        .readTimeout(4, TimeUnit.SECONDS)
+        .callTimeout(5, TimeUnit.SECONDS)
+        .build()
+
+    private fun resolveDoh(hostname: String): List<java.net.InetAddress> {
+        val json = dohClient.newCall(
+            Request.Builder()
+                .url("https://1.1.1.1/dns-query?name=$hostname&type=A")
+                .header("accept", "application/dns-json")
+                .build(),
+        ).execute().use { resp ->
+            if (!resp.isSuccessful) error("DoH responded ${resp.code}")
+            resp.body?.string() ?: error("empty DoH response")
+        }
+        val answers = JSONObject(json).optJSONArray("Answer") ?: error("no DoH answer")
+        val out = mutableListOf<java.net.InetAddress>()
+        for (i in 0 until answers.length()) {
+            val a = answers.getJSONObject(i)
+            if (a.optInt("type") == 1) {
+                // Parsing an IP literal never touches the OS resolver.
+                runCatching { java.net.InetAddress.getByName(a.optString("data")) }
+                    .getOrNull()?.let { out.add(it) }
+            }
+        }
+        if (out.isEmpty()) error("no A record for $hostname")
+        return out
+    }
+
+    /** DoH first (bulletproof), then the bounded system resolver. */
+    private fun resolve(hostname: String): List<java.net.InetAddress> {
+        dnsCache[hostname]?.let { (at, v) ->
+            if (System.currentTimeMillis() - at < 5 * 60_000L) return v
+        }
+        val v = runCatching { resolveDoh(hostname) }.getOrNull()
+            ?: dnsExecutor
+                .submit(java.util.concurrent.Callable {
+                    java.net.InetAddress.getAllByName(hostname).toList()
+                })
+                .get(5, TimeUnit.SECONDS)
+        dnsCache[hostname] = System.currentTimeMillis() to v
+        return v
+    }
+
+    private fun http(): OkHttpClient = OkHttpClient.Builder()
+        .dns(object : okhttp3.Dns {
+            override fun lookup(hostname: String): List<java.net.InetAddress> = try {
+                resolve(hostname)
+            } catch (e: Exception) {
+                android.util.Log.w("UpdateManager", "DNS lookup failed/timed out: $hostname")
+                throw java.net.UnknownHostException("DNS timeout: $hostname")
+            }
+        })
+        .connectTimeout(10, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
+        .callTimeout(30, TimeUnit.SECONDS)
+        .build()
+
     /** Where the downloaded APK lands; shared with the installer via FileProvider. */
     fun apkFile(context: Context): File = File(File(context.cacheDir, "ota"), "update.apk")
 
@@ -56,11 +136,7 @@ object Updater {
      */
     suspend fun fetchLatest(): Release? = withContext(Dispatchers.IO) {
         runCatching {
-            val http = OkHttpClient.Builder()
-                .connectTimeout(10, TimeUnit.SECONDS)
-                .readTimeout(20, TimeUnit.SECONDS)
-                .build()
-            val json = http.newCall(
+            val json = http().newCall(
                 Request.Builder()
                     .url(LATEST_URL)
                     .header("Accept", "application/vnd.github+json")
@@ -126,11 +202,7 @@ object Updater {
             val dest = apkFile(context)
             dest.parentFile?.mkdirs()
             dest.delete()
-            val http = OkHttpClient.Builder()
-                .connectTimeout(15, TimeUnit.SECONDS)
-                .readTimeout(60, TimeUnit.SECONDS)
-                .build()
-            http.newCall(Request.Builder().url(release.apkUrl).build()).execute().use { resp ->
+            http().newCall(Request.Builder().url(release.apkUrl).build()).execute().use { resp ->
                 if (!resp.isSuccessful) return@withContext null
                 val body = resp.body ?: return@withContext null
                 val total = body.contentLength().takeIf { it > 0 } ?: release.sizeBytes
