@@ -26,6 +26,8 @@ object UpdateManager {
         val tag: String = "",
         /** Download progress, 0..100 (only meaningful while DOWNLOADING). */
         val progress: Int = 0,
+        /** True when the offered release is a pre-release (beta opt-in). */
+        val prerelease: Boolean = false,
     )
 
     /** Single source of truth; UI screens collect this. */
@@ -74,9 +76,9 @@ object UpdateManager {
                 Updater.isNewer(rel.tag, Updater.installedVersion(app)) ->
                     if (apkMatches(app, rel)) {
                         android.util.Log.d(TAG, "check: APK already downloaded for ${rel.tag} - skipping to READY")
-                        UpdateState(Phase.READY, rel.tag, 100)
+                        UpdateState(Phase.READY, rel.tag, 100, rel.prerelease)
                     } else {
-                        UpdateState(Phase.AVAILABLE, rel.tag)
+                        UpdateState(Phase.AVAILABLE, rel.tag, prerelease = rel.prerelease)
                     }
                 else -> {
                     // Stale APK from an old release would only waste space.

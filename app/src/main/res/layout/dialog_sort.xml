@@ -55,6 +55,41 @@
             android:textSize="16sp" />
     </RadioGroup>
 
+    <!-- View style: poster cards or a details list with full file names. -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="10dp"
+        android:text="View"
+        android:textColor="@color/text_secondary"
+        android:textSize="12sp"
+        android:textStyle="bold" />
+
+    <RadioGroup
+        android:id="@+id/viewChoices"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <RadioButton
+            android:id="@+id/rbViewCards"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Cards"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp" />
+
+        <RadioButton
+            android:id="@+id/rbViewList"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="Details list"
+            android:textColor="@color/text_primary"
+            android:textSize="16sp" />
+    </RadioGroup>
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"

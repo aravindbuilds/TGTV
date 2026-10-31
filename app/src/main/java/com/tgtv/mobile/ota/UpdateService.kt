@@ -36,6 +36,7 @@ class UpdateService : Service() {
         private const val EXTRA_TAG = "tag"
         private const val EXTRA_URL = "url"
         private const val EXTRA_SIZE = "size"
+        private const val EXTRA_PRERELEASE = "prerelease"
         private const val TAG = "UpdateManager"
 
         /** Kicks off the download of [rel]; safe to call from any screen. */
@@ -44,6 +45,7 @@ class UpdateService : Service() {
                 .putExtra(EXTRA_TAG, rel.tag)
                 .putExtra(EXTRA_URL, rel.apkUrl)
                 .putExtra(EXTRA_SIZE, rel.sizeBytes)
+                .putExtra(EXTRA_PRERELEASE, rel.prerelease)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(i)
             } else {
@@ -72,17 +74,18 @@ class UpdateService : Service() {
         val tag = intent?.getStringExtra(EXTRA_TAG).orEmpty()
         val url = intent?.getStringExtra(EXTRA_URL).orEmpty()
         val size = intent?.getLongExtra(EXTRA_SIZE, 0L) ?: 0L
+        val pre = intent?.getBooleanExtra(EXTRA_PRERELEASE, false) ?: false
         if (tag.isBlank() || url.isBlank()) {
             stopSelf()
             return START_NOT_STICKY
         }
         UpdateManager.state.value = UpdateManager.UpdateState(
-            UpdateManager.Phase.DOWNLOADING, tag, 0,
+            UpdateManager.Phase.DOWNLOADING, tag, 0, pre,
         )
         scope.launch {
             val file = Updater.download(
                 applicationContext,
-                Updater.Release(tag, "", "", url, size),
+                Updater.Release(tag, "", "", url, size, pre),
             ) { pct ->
                 UpdateManager.state.value = UpdateManager.state.value.copy(progress = pct)
                 nm.notify(NOTIF_ID, progressNotification("$tag — $pct%", pct))
@@ -103,7 +106,7 @@ class UpdateService : Service() {
                     .onFailure { android.util.Log.w(TAG, "Downloads copy failed", it) }
                     .getOrNull()
                 UpdateManager.state.value = UpdateManager.UpdateState(
-                    UpdateManager.Phase.READY, tag, 100,
+                    UpdateManager.Phase.READY, tag, 100, pre,
                 )
                 nm.notify(NOTIF_ID, readyNotification(tag, publicPath))
             } else {

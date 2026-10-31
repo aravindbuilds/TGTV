@@ -10,6 +10,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.util.concurrent.TimeUnit
@@ -33,6 +34,8 @@ object Updater {
     const val REPO = "aravindbuilds/TGTV"
 
     private const val LATEST_URL = "https://api.github.com/repos/$REPO/releases/latest"
+
+    private const val REPO_API = "https://api.github.com/repos/$REPO"
 
     /**
      * Bounded DNS: InetAddress lookups have no timeout of their own and can
@@ -123,6 +126,7 @@ object Updater {
         val notes: String,
         val apkUrl: String,
         val sizeBytes: Long,
+        val prerelease: Boolean = false,
     )
 
     /** This build's versionName (e.g. "1.0"). */
@@ -131,12 +135,14 @@ object Updater {
     }.getOrDefault("")
 
     /**
-     * Fetches the latest published release, or null when GitHub is
-     * unreachable / the release has no APK asset.
+     * Fetches the release the app should offer: the latest stable by default,
+     * or - when [betas] is on - the newest entry (stable or pre-release) with
+     * an APK asset. Null when GitHub is unreachable / nothing has an APK.
      */
-    suspend fun fetchLatest(): Release? = withContext(Dispatchers.IO) {
+    suspend fun fetchLatest(betas: Boolean = false): Release? = withContext(Dispatchers.IO) {
         runCatching {
-            val json = http().newCall(
+            if (betas) return@runCatching fetchBetaFromList()
+            val obj = http().newCall(
                 Request.Builder()
                     .url(LATEST_URL)
                     .header("Accept", "application/vnd.github+json")
@@ -147,31 +153,59 @@ object Updater {
                     return@withContext null
                 }
                 resp.body?.string() ?: return@withContext null
-            }
-            val obj = JSONObject(json)
-            val assets = obj.optJSONArray("assets") ?: return@withContext null
-            var url = ""
-            var size = 0L
-            for (i in 0 until assets.length()) {
-                val a = assets.getJSONObject(i)
-                val name = a.optString("name", "")
-                if (name.endsWith(".apk", ignoreCase = true)) {
-                    url = a.optString("browser_download_url", "")
-                    size = a.optLong("size", 0L)
-                    break
-                }
-            }
-            if (url.isBlank()) return@withContext null
-            Release(
-                tag = obj.optString("tag_name", "").trimStart('v', 'V'),
-                title = obj.optString("name", ""),
-                notes = obj.optString("body", ""),
-                apkUrl = url,
-                sizeBytes = size,
-            )
+            }.let { JSONObject(it) }
+            apkFrom(obj, prerelease = false)
         }.onFailure {
             android.util.Log.w("UpdateManager", "fetchLatest failed", it)
         }.getOrNull()
+    }
+
+    /**
+     * Walks the newest releases top-down and returns the first one that is
+     * allowed (pre-releases are permitted here) and carries an APK. The list
+     * is newest-first, so the first match is the newest candidate.
+     */
+    private fun fetchBetaFromList(): Release? {
+        val json = http().newCall(
+            Request.Builder()
+                .url("$REPO_API/releases?per_page=10")
+                .header("Accept", "application/vnd.github+json")
+                .build(),
+        ).execute().use { resp ->
+            if (!resp.isSuccessful) error("GitHub responded ${resp.code}")
+            resp.body?.string() ?: error("empty releases body")
+        }
+        val arr = JSONArray(json)
+        for (i in 0 until arr.length()) {
+            val rel = apkFrom(arr.getJSONObject(i), prerelease = arr.getJSONObject(i).optBoolean("prerelease"))
+            if (rel != null) return rel
+        }
+        return null
+    }
+
+    /** Builds a [Release] from one release object, or null without an APK asset. */
+    private fun apkFrom(obj: JSONObject, prerelease: Boolean): Release? {
+        val assets = obj.optJSONArray("assets") ?: return null
+        var url = ""
+        var size = 0L
+        for (i in 0 until assets.length()) {
+            val a = assets.getJSONObject(i)
+            val name = a.optString("name", "")
+            if (name.endsWith(".apk", ignoreCase = true)) {
+                url = a.optString("browser_download_url", "")
+                size = a.optLong("size", 0L)
+                break
+            }
+        }
+        if (url.isBlank()) return null
+        return Release(
+            tag = obj.optString("tag_name", "").trimStart('v', 'V'),
+            title = obj.optString("name", ""),
+            notes = obj.optString("body", ""),
+            apkUrl = url,
+            sizeBytes = size,
+            prerelease = prerelease,
+        )
     }
 
     /**

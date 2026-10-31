@@ -22,6 +22,8 @@ object Credentials {
     const val KEY_DOWNLOAD_DIR = "download_dir"
     const val KEY_HOME_SORT = "home_sort"
     const val KEY_HOME_GROUP = "home_group_chats"
+    const val KEY_HOME_VIEW = "home_view"
+    const val KEY_BETA_UPDATES = "beta_updates"
 
     private fun prefs(context: Context): SharedPreferences =
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
@@ -153,6 +155,23 @@ object Credentials {
 
     fun setHomeGroup(context: Context, on: Boolean) {
         prefs(context).edit().putBoolean(KEY_HOME_GROUP, on).apply()
+    }
+
+    /**
+     * Library view style: 0 = poster cards (Netflix-style), 1 = details list
+     * (rows with the full file name, chat, size and duration visible).
+     */
+    fun homeView(context: Context): Int = prefs(context).getInt(KEY_HOME_VIEW, 0)
+
+    fun setHomeView(context: Context, view: Int) {
+        prefs(context).edit().putInt(KEY_HOME_VIEW, view.coerceIn(0, 1)).apply()
+    }
+
+    /** OTA updates: also consider GitHub pre-releases (betas). */
+    fun betaUpdates(context: Context): Boolean = prefs(context).getBoolean(KEY_BETA_UPDATES, false)
+
+    fun setBetaUpdates(context: Context, on: Boolean) {
+        prefs(context).edit().putBoolean(KEY_BETA_UPDATES, on).apply()
     }
 
     // ------------------------------------------------------------------

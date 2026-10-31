@@ -14,6 +14,7 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ProgressBar
@@ -33,6 +34,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.bottomnavigation.BottomNavigationView
 import com.tgtv.mobile.R
 import com.tgtv.mobile.model.ChatSelection
+import com.tgtv.mobile.model.LibrarySnapshot
 import com.tgtv.mobile.model.VideoItem
 import com.tgtv.mobile.model.VideoMapper
 import com.tgtv.mobile.model.WatchProgress
@@ -85,6 +87,8 @@ class HomeActivity : AppCompatActivity() {
     private lateinit var continueAdapter: ContinueAdapter
     private lateinit var searchRow: View
     private lateinit var searchInput: EditText
+    private lateinit var favChips: android.widget.LinearLayout
+    private lateinit var favChipsScroll: android.widget.HorizontalScrollView
 
     /** Current library filter (empty = no filter). */
     private var query: String = ""
@@ -105,6 +109,12 @@ class HomeActivity : AppCompatActivity() {
     private enum class Tab { HOME, MYLIST }
 
     private var tab: Tab = Tab.HOME
+
+    /**
+     * Favourites tab: the named collection being viewed, null = "All"
+     * (union of every named list).
+     */
+    private var activeFavList: String? = null
 
     /** True when the live session is a bot (changes empty-state copy). */
     private var botSession = false
@@ -161,6 +171,8 @@ class HomeActivity : AppCompatActivity() {
         searchRow = findViewById(R.id.searchRow)
         searchInput = findViewById(R.id.searchInput)
         findViewById<View>(R.id.btnSearch).setOnClickListener { toggleSearch() }
+        favChips = findViewById(R.id.favChips)
+        favChipsScroll = findViewById(R.id.favChipsScroll)
         // Downloads progress in the status bar; Android 13+ denies the
         // permission by default, so ask once up front.
         if (Build.VERSION.SDK_INT >= 33 &&
@@ -177,7 +189,7 @@ class HomeActivity : AppCompatActivity() {
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) = Unit
             override fun afterTextChanged(s: Editable?) {
                 query = s?.toString().orEmpty().trim()
-                if (tab == Tab.MYLIST) showMyList() else showHome()
+                if (tab == Tab.MYLIST) showFavourites() else showHome()
             }
         })
         findViewById<View>(R.id.btnRefresh).setOnClickListener { refresh() }
@@ -193,7 +205,7 @@ class HomeActivity : AppCompatActivity() {
                 }
                 R.id.nav_mylist -> {
                     tab = Tab.MYLIST
-                    showMyList()
+                    showFavourites()
                     true
                 }
                 R.id.nav_profile -> {
@@ -205,7 +217,14 @@ class HomeActivity : AppCompatActivity() {
             }
         }
         TdLib.addListener(videoUpdateListener)
-        showHome()
+        // Instant open: hydrate the last scan from disk, then refresh from
+        // Telegram in the background - no spinner on a warm start.
+        val snapshot = LibrarySnapshot.load(this)
+        if (snapshot.isNotEmpty()) {
+            items.clear()
+            items.addAll(snapshot)
+            showHome()
+        }
         refresh()
         autoCheckUpdates()
     }
@@ -238,7 +257,7 @@ class HomeActivity : AppCompatActivity() {
                 when (st.phase) {
                     UpdateManager.Phase.AVAILABLE -> if (!updateOfferShown) {
                         updateOfferShown = true
-                        showUpdateOffer(st.tag)
+                        showUpdateOffer(st.tag, st.prerelease)
                     }
                     UpdateManager.Phase.DOWNLOADING -> updateDlg?.let { dlg ->
                         dlg.setTitle("Downloading update")
@@ -289,10 +308,10 @@ class HomeActivity : AppCompatActivity() {
     }
 
     /** Offer dialog for a newly found release; Download starts the transfer. */
-    private fun showUpdateOffer(tag: String) {
+    private fun showUpdateOffer(tag: String, prerelease: Boolean) {
         if (isFinishing || isDestroyed) return
         updateDlg = AlertDialog.Builder(this)
-            .setTitle("Update available")
+            .setTitle("Update available${if (prerelease) " (beta)" else ""}")
             .setMessage("TGTV v$tag is ready to install.")
             .setPositiveButton("Download") { _, _ -> UpdateManager.download(this) }
             .setNegativeButton("Later", null)
@@ -313,7 +332,7 @@ class HomeActivity : AppCompatActivity() {
                 return
             }
             when (tab) {
-                Tab.MYLIST -> showMyList()
+                Tab.MYLIST -> showFavourites()
                 else -> if (items.isEmpty()) refresh() else showHome()
             }
         }
@@ -346,6 +365,7 @@ class HomeActivity : AppCompatActivity() {
     }
 
     private fun showHome() {
+        if (::favChipsScroll.isInitialized) favChipsScroll.visibility = View.GONE
         val searching = query.isNotBlank()
         displayed = sortedForDisplay(if (searching) filtered(items) else items)
         labelAdapter.text = if (searching) "Results (${displayed.size})" else "My Library"
@@ -359,15 +379,153 @@ class HomeActivity : AppCompatActivity() {
         renderStatusFor(displayed)
     }
 
-    private fun showMyList() {
-        displayed = sortedForDisplay(filtered(Watchlist.all(this)))
-        labelAdapter.text = if (query.isNotBlank()) "Results (${displayed.size})" else "My List"
+    /** Favourites tab: "All" (union) or one named collection, with chips. */
+    private fun showFavourites() {
+        val source = if (activeFavList == null) {
+            Watchlist.all(this)
+        } else {
+            Watchlist.items(this, activeFavList!!)
+        }
+        displayed = sortedForDisplay(filtered(source))
+        labelAdapter.text = when {
+            query.isNotBlank() -> "Results (${displayed.size})"
+            else -> activeFavList ?: "Favourites"
+        }
         labelAdapter.refresh()
         videoAdapter.rebuild()
         bindHero(null)
         continueAdapter.setData(emptyList())
+        renderFavChips()
         prefetchVisibleThumbs()
         renderStatusFor(displayed)
+    }
+
+    // ------------------------------------------------- favourites chips
+
+    /** Rebuilds the "All | list | list | +" chip row (Favourites tab only). */
+    private fun renderFavChips() {
+        favChipsScroll.visibility = if (tab == Tab.MYLIST) View.VISIBLE else View.GONE
+        if (tab != Tab.MYLIST) return
+        favChips.removeAllViews()
+        val names = Watchlist.names(this)
+        fun chip(text: String, active: Boolean, onClick: () -> Unit, onLong: (() -> Unit)? = null) {
+            val tv = TextView(this)
+            tv.text = text
+            tv.setPadding(28, 12, 28, 12)
+            tv.setTextSize(13f)
+            tv.setBackgroundResource(
+                if (active) R.drawable.bg_fab_red else R.drawable.bg_fab_dark,
+            )
+            tv.setTextColor(ContextCompat.getColor(this, if (active) android.R.color.white else R.color.text_secondary))
+            tv.layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+                android.view.ViewGroup.LayoutParams.WRAP_CONTENT,
+            ).apply { marginEnd = 12 }
+            tv.setOnClickListener { onClick() }
+            onLong?.let { cb -> tv.setOnLongClickListener { cb(); true } }
+            favChips.addView(tv)
+        }
+        chip("All", activeFavList == null, { activeFavList = null; showFavourites() })
+        for (n in names) {
+            chip(n, activeFavList == n, { activeFavList = n; showFavourites() }) { chipMenu(n) }
+        }
+        chip("+ New", false, { newFavListDialog() })
+    }
+
+    /** Rename / delete an existing favourites list. */
+    private fun chipMenu(name: String) {
+        AlertDialog.Builder(this)
+            .setTitle(name)
+            .setItems(arrayOf("Rename", "Delete")) { _, which ->
+                when (which) {
+                    0 -> {
+                        val input = EditText(this)
+                        input.setText(name)
+                        AlertDialog.Builder(this)
+                            .setTitle("Rename list")
+                            .setView(input)
+                            .setPositiveButton("Save") { _, _ ->
+                                if (Watchlist.rename(this, name, input.text.toString())) {
+                                    if (activeFavList == name) activeFavList = input.text.toString().trim()
+                                    showFavourites()
+                                } else {
+                                    Toast.makeText(this, "That name is taken", Toast.LENGTH_SHORT).show()
+                                }
+                            }
+                            .setNegativeButton("Cancel", null)
+                            .show()
+                    }
+                    else -> AlertDialog.Builder(this)
+                        .setTitle("Delete \"$name\"?")
+                        .setMessage("The list is removed; the videos themselves stay in your library.")
+                        .setPositiveButton("Delete") { _, _ ->
+                            Watchlist.delete(this, name)
+                            if (activeFavList == name) activeFavList = null
+                            showFavourites()
+                        }
+                        .setNegativeButton("Cancel", null)
+                        .show()
+                }
+            }
+            .show()
+    }
+
+    /** Creates a new named favourites list and switches to it. */
+    private fun newFavListDialog() {
+        val input = EditText(this)
+        input.hint = "e.g. Anime, Watch with dad…"
+        AlertDialog.Builder(this)
+            .setTitle("New favourites list")
+            .setView(input)
+            .setPositiveButton("Create") { _, _ ->
+                val n = input.text.toString().trim()
+                if (n.isEmpty()) return@setPositiveButton
+                if (Watchlist.create(this, n)) {
+                    activeFavList = n
+                    showFavourites()
+                } else {
+                    Toast.makeText(this, "That name is taken", Toast.LENGTH_SHORT).show()
+                }
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
+    }
+
+    /**
+     * Per-list membership chooser: checkboxes for every named list plus an
+     * optional "new list" field, applied to one video on Save.
+     */
+    private fun favChooserDialog(video: VideoItem) {
+        val names = Watchlist.names(this)
+        val box = android.widget.LinearLayout(this)
+        box.orientation = android.widget.LinearLayout.VERTICAL
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        box.setPadding(pad, pad / 2, pad, 0)
+        val checks = names.associateWith { CheckBox(this) }
+        val member = Watchlist.membership(this, video)
+        for ((name, cb) in checks) {
+            cb.text = name
+            cb.isChecked = name in member
+            cb.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
+            box.addView(cb)
+        }
+        val input = EditText(this)
+        input.hint = "New list name (optional)"
+        box.addView(input)
+        AlertDialog.Builder(this)
+            .setTitle("Add to favourites")
+            .setView(box)
+            .setPositiveButton("Save") { _, _ ->
+                val wanted = checks.filter { it.value.isChecked }.keys.toMutableSet()
+                val newName = input.text.toString().trim()
+                if (newName.isNotEmpty() && Watchlist.create(this, newName)) {
+                    wanted.add(newName)
+                }
+                Watchlist.setMembership(this, video, wanted)
+                if (tab == Tab.MYLIST) showFavourites()
+            }
+            .setNegativeButton("Cancel", null)
+            .show()
     }
 
     // -------------------------------------------------------------- sort
@@ -406,6 +564,9 @@ class HomeActivity : AppCompatActivity() {
         choices[Credentials.homeSort(this)]?.isChecked = true
         val groupSwitch = view.findViewById<Switch>(R.id.switchGroup)
         groupSwitch.isChecked = Credentials.homeGroup(this)
+        val rbList = view.findViewById<RadioButton>(R.id.rbViewList)
+        val rbCards = view.findViewById<RadioButton>(R.id.rbViewCards)
+        if (Credentials.homeView(this) == 1) rbList.isChecked = true else rbCards.isChecked = true
         AlertDialog.Builder(this)
             .setTitle("Sort library")
             .setView(view)
@@ -414,7 +575,8 @@ class HomeActivity : AppCompatActivity() {
                     ?: SORT_NEWEST
                 Credentials.setHomeSort(this, mode)
                 Credentials.setHomeGroup(this, groupSwitch.isChecked)
-                if (tab == Tab.MYLIST) showMyList() else showHome()
+                Credentials.setHomeView(this, if (rbList.isChecked) 1 else 0)
+                if (tab == Tab.MYLIST) showFavourites() else showHome()
             }
             .setNegativeButton("Cancel", null)
             .show()
@@ -506,6 +668,7 @@ class HomeActivity : AppCompatActivity() {
         const val TYPE_CONTINUE = 3
         const val TYPE_GROUP_HEADER = 4
         const val TYPE_GROUP_ROW = 5
+        const val TYPE_VIDEO_LIST = 6
 
         /** Home sort modes (Credentials.homeSort). */
         const val SORT_NEWEST = 0
@@ -714,9 +877,13 @@ class HomeActivity : AppCompatActivity() {
 
     private suspend fun reload() {
         if (!loading.compareAndSet(false, true)) return
-        runOnUiThread {
-            status.visibility = View.VISIBLE
-            status.text = "Loading your videos…"
+        // A warm start already hydrated the snapshot - no spinner; the
+        // background scan simply swaps fresher content in when it lands.
+        if (items.isEmpty()) {
+            runOnUiThread {
+                status.visibility = View.VISIBLE
+                status.text = "Loading your videos…"
+            }
         }
         try {
             // Bots have no Saved Messages and cannot read history; user
@@ -815,6 +982,8 @@ class HomeActivity : AppCompatActivity() {
     private fun applyVideos(videos: List<VideoItem>) {
         items.clear()
         items.addAll(videos)
+        // Persist for the next launch's instant open.
+        if (videos.isNotEmpty()) LibrarySnapshot.save(applicationContext, videos)
         if (tab == Tab.MYLIST) {
             // Keep whatever My List is showing; the reload only affects Home.
             renderStatusFor(displayed)
@@ -1050,6 +1219,7 @@ class HomeActivity : AppCompatActivity() {
         val header: String? = null,
         val video: VideoItem? = null,
         val groupVideos: List<VideoItem>? = null,
+        val listStyle: Boolean = false,
     )
 
     class Cell(v: View) : RecyclerView.ViewHolder(v) {
@@ -1068,14 +1238,18 @@ class HomeActivity : AppCompatActivity() {
         private var rows: List<AdapterRow> = emptyList()
 
         /**
-         * Rebuilds the rows from [displayed]. With the group toggle on,
+         * Rebuilds the rows from [displayed]. Details-list view is always a
+         * flat list of rows. With the group toggle on (cards view),
          * [displayed] is chat-consecutive and each chat becomes a small
          * header + one full-width row of swipeable cards; otherwise the
          * list is the flat 3-column grid.
          */
         fun rebuild() {
             val out = mutableListOf<AdapterRow>()
-            if (Credentials.homeGroup(this@HomeActivity)) {
+            if (Credentials.homeView(this@HomeActivity) == 1) {
+                // Details list: full file names, one row per video.
+                for (v in displayed) out.add(AdapterRow(video = v, listStyle = true))
+            } else if (Credentials.homeGroup(this@HomeActivity)) {
                 val groups = LinkedHashMap<Any, MutableList<VideoItem>>()
                 for (v in displayed) groups.getOrPut(v.chatId) { mutableListOf() }.add(v)
                 for (vids in groups.values) {
@@ -1091,13 +1265,14 @@ class HomeActivity : AppCompatActivity() {
 
         /** True when the video-region row at [offset] takes the full width. */
         fun isFullSpan(offset: Int): Boolean =
-            offset >= 0 && rows.getOrNull(offset)?.video == null
+            offset >= 0 && (rows.getOrNull(offset)?.video == null || rows.getOrNull(offset)?.listStyle == true)
 
         override fun getItemViewType(position: Int): Int {
             val row = rows.getOrNull(position) ?: return TYPE_VIDEO
             return when {
                 row.header != null -> TYPE_GROUP_HEADER
                 row.groupVideos != null -> TYPE_GROUP_ROW
+                row.listStyle -> TYPE_VIDEO_LIST
                 else -> TYPE_VIDEO
             }
         }
@@ -1111,6 +1286,10 @@ class HomeActivity : AppCompatActivity() {
                 TYPE_GROUP_ROW -> GroupRowHolder(
                     LayoutInflater.from(parent.context)
                         .inflate(R.layout.item_chat_row, parent, false),
+                )
+                TYPE_VIDEO_LIST -> ListHolder(
+                    LayoutInflater.from(parent.context)
+                        .inflate(R.layout.item_video_row, parent, false),
                 )
                 else -> Cell(
                     LayoutInflater.from(parent.context)
@@ -1126,10 +1305,86 @@ class HomeActivity : AppCompatActivity() {
                 is GroupRowHolder -> holder.adapter.setItems(
                     rows[position].groupVideos.orEmpty(),
                 )
+                is ListHolder -> bindVideoList(holder, rows.getOrNull(position)?.video ?: return)
                 is Cell -> bindVideo(holder, rows.getOrNull(position)?.video ?: return)
             }
         }
 
+    }
+
+    /** Holder of a details-list row (full file name visible). */
+    inner class ListHolder(v: View) : RecyclerView.ViewHolder(v) {
+        val img: ImageView = v.findViewById(R.id.rowThumb)
+        val title: TextView = v.findViewById(R.id.rowTitle)
+        val meta: TextView = v.findViewById(R.id.rowMeta)
+        val progress: ProgressBar = v.findViewById(R.id.rowProgress)
+        val btnList: ImageButton = v.findViewById(R.id.rowBtnList)
+    }
+
+    /**
+     * Binds a details-list row: the FULL file name is the headline - no TMDB
+     * title substitution - so files without metadata stay readable. Chat,
+     * size and duration make up the meta line.
+     */
+    private fun bindVideoList(holder: ListHolder, video: VideoItem) {
+        val context = holder.itemView.context
+        holder.itemView.tag = video
+        holder.title.text = video.fileName.ifBlank { video.title }
+        holder.meta.text = listOfNotNull(
+            video.chatTitle.ifBlank { null },
+            video.prettySize().ifBlank { null },
+            video.prettyDuration().ifBlank { null },
+        ).joinToString(" • ")
+        holder.img.setImageBitmap(null)
+
+        val prog = progressOf(video)
+        if (prog != null && prog.second > 0) {
+            holder.progress.progress = ((prog.first * 1000L) / prog.second).toInt().coerceIn(0, 1000)
+            holder.progress.visibility = View.VISIBLE
+        } else {
+            holder.progress.visibility = View.GONE
+        }
+
+        holder.btnList.setOnClickListener {
+            val added = Watchlist.toggle(context, video)
+            renderRowListState(holder, added)
+            if (tab == Tab.MYLIST && !added) showFavourites()
+        }
+        holder.btnList.setOnLongClickListener {
+            favChooserDialog(video)
+            true
+        }
+        renderRowListState(holder, Watchlist.contains(context, video))
+
+        if (video.thumbnailFileId != 0) {
+            ThumbCache.cached(ThumbCache.key(video))?.let { holder.img.setImageBitmap(it) }
+                ?: holder.itemView.post {
+                    if (holder.itemView.tag == video) loadThumbInto(video) { bmp ->
+                        if (holder.itemView.tag == video) holder.img.setImageBitmap(bmp)
+                    }
+                }
+        }
+
+        holder.itemView.setOnClickListener {
+            val i = holder.bindingAdapterPosition
+            if (i >= 0) openDetails(video, displayed.toList())
+        }
+        holder.itemView.setOnLongClickListener {
+            if (tab == Tab.MYLIST) removeFromFavourites(video)
+            true
+        }
+    }
+
+    private fun renderRowListState(holder: ListHolder, added: Boolean) {
+        holder.btnList.setBackgroundResource(
+            if (added) R.drawable.bg_fab_red else R.drawable.bg_fab_dark,
+        )
+        holder.btnList.imageTintList = ColorStateList.valueOf(
+            ContextCompat.getColor(
+                this@HomeActivity,
+                if (added) android.R.color.white else R.color.text_secondary,
+            ),
+        )
     }
 
     /**
@@ -1204,12 +1459,17 @@ class HomeActivity : AppCompatActivity() {
             holder.progress.visibility = View.GONE
         }
 
-        // Heart button: bookmark straight from the grid.
+        // Heart button: tap = quick bookmark ("My List"), long-press = pick
+        // exactly which named favourites lists get it.
         renderListState(holder, Watchlist.contains(context, video))
         holder.btnList.setOnClickListener {
             val added = Watchlist.toggle(context, video)
             renderListState(holder, added)
-            if (tab == Tab.MYLIST && !added) showMyList()
+            if (tab == Tab.MYLIST && !added) showFavourites()
+        }
+        holder.btnList.setOnLongClickListener {
+            favChooserDialog(video)
+            true
         }
 
         // Telegram thumbnail: memory hit paints instantly; otherwise one
@@ -1246,16 +1506,26 @@ class HomeActivity : AppCompatActivity() {
                 openDetails(video, displayed.toList())
             }
         }
-        // Long-press only removes from My List; downloads are started from
+        // Long-press only removes from favourites; downloads are started from
         // the details screen, not by hidden presses in the grid.
         holder.itemView.setOnLongClickListener {
-            if (tab == Tab.MYLIST) {
-                Watchlist.toggle(this@HomeActivity, video)
-                showMyList()
-                Toast.makeText(this@HomeActivity, "Removed from My List", Toast.LENGTH_SHORT).show()
-            }
+            if (tab == Tab.MYLIST) removeFromFavourites(video)
             true
         }
+    }
+
+    /** Grid long-press in the Favourites tab: remove from the viewed list
+     *  ("All" = every list), keeping the other memberships intact. */
+    private fun removeFromFavourites(video: VideoItem) {
+        val active = activeFavList
+        if (active == null) {
+            Watchlist.setMembership(this, video, emptySet())
+            Toast.makeText(this, "Removed from all favourites lists", Toast.LENGTH_SHORT).show()
+        } else {
+            Watchlist.setMembership(this, video, Watchlist.membership(this, video) - active)
+            Toast.makeText(this, "Removed from $active", Toast.LENGTH_SHORT).show()
+        }
+        showFavourites()
     }
 
     private fun renderListState(holder: Cell, added: Boolean) {

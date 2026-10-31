@@ -115,6 +115,26 @@
         android:textSize="14sp"
         android:visibility="gone" />
 
+    <!-- Favourites tab: named collection chips ("All", each list, "+"). -->
+    <HorizontalScrollView
+        android:id="@+id/favChipsScroll"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:clipToPadding="false"
+        android:paddingStart="14dp"
+        android:paddingEnd="14dp"
+        android:scrollbars="none"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:id="@+id/favChips"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:orientation="horizontal"
+            android:paddingTop="8dp"
+            android:paddingBottom="8dp" />
+    </HorizontalScrollView>
+
     <androidx.recyclerview.widget.RecyclerView
         android:id="@+id/grid"
         android:layout_width="match_parent"

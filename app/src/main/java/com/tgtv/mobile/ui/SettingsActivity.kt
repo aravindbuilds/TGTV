@@ -7,6 +7,7 @@ import android.os.Environment
 import android.view.View
 import android.widget.EditText
 import android.widget.ImageButton
+import android.widget.Switch
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
@@ -42,6 +43,7 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnSignOut).setOnClickListener { signOut() }
         findViewById<View>(R.id.btnCheckUpdates).setOnClickListener { onUpdateRow() }
         findViewById<ImageButton>(R.id.btnBackIcon).setOnClickListener { finish() }
+        setupBetaToggle()
         fillRows()
         // Live view of the process-wide update state; the check itself keeps
         // running in UpdateManager even if this screen is left.
@@ -56,6 +58,28 @@ class SettingsActivity : AppCompatActivity() {
         // Coming back from the "Install unknown apps" page: if the user just
         // granted it, launch the installer right away.
         UpdateManager.resumeInstall(this)
+    }
+
+    /** Beta opt-in: when on, the updater also offers pre-release versions. */
+    private fun setupBetaToggle() {
+        val sw = findViewById<Switch>(R.id.switchBeta)
+        val sub = findViewById<TextView>(R.id.txtBetaSub)
+        sw.isChecked = Credentials.betaUpdates(this)
+        sub.text = if (sw.isChecked) {
+            "On — pre-releases offered as they come out"
+        } else {
+            "Off — stable releases only"
+        }
+        sw.setOnCheckedChangeListener { _, checked ->
+            Credentials.setBetaUpdates(this, checked)
+            sub.text = if (checked) {
+                "On — pre-releases offered as they come out"
+            } else {
+                "Off — stable releases only"
+            }
+            // Re-check immediately so the row reflects the new preference.
+            UpdateManager.check(this)
+        }
     }
 
     /** Fills the per-row subtitle lines with live state. */
@@ -406,9 +430,10 @@ class SettingsActivity : AppCompatActivity() {
             UpdateManager.Phase.CHECKING -> "Checking…"
             UpdateManager.Phase.UP_TO_DATE ->
                 "You're on the latest version (v${Updater.installedVersion(this)})"
-            UpdateManager.Phase.AVAILABLE -> "v${st.tag} available — tap to download & install"
+            UpdateManager.Phase.AVAILABLE ->
+                "v${st.tag}${if (st.prerelease) " (beta)" else ""} available — tap to download & install"
             UpdateManager.Phase.DOWNLOADING -> "Downloading… ${st.progress}%"
-            UpdateManager.Phase.READY -> "v${st.tag} ready — tap to install"
+            UpdateManager.Phase.READY -> "v${st.tag}${if (st.prerelease) " (beta)" else ""} ready — tap to install"
             UpdateManager.Phase.FAILED -> "Download failed — tap to retry"
         }
     }
