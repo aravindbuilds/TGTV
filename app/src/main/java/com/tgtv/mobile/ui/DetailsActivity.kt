@@ -177,8 +177,18 @@ class DetailsActivity : AppCompatActivity() {
         }
     }
 
-    /** Toggles My List from the Story Line header (the only My List control here). */
+    /**
+     * My List control from the Story Line header: with more than one named
+     * list, tapping the heart opens the pill chooser (which lists get it?);
+     * with the single default list it stays a one-tap bookmark toggle.
+     */
     private fun addToList() {
+        if (Watchlist.names(this).size > 1) {
+            FavouritesUi.showChooser(this, video) {
+                renderWatchlistState(Watchlist.contains(this, video))
+            }
+            return
+        }
         val added = Watchlist.toggle(this, video)
         renderWatchlistState(added)
         Toast.makeText(

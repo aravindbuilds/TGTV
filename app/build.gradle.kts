@@ -15,8 +15,8 @@ android {
         applicationId = "com.tgtv.mobile"
         minSdk = 26
         targetSdk = 35
-        versionCode = 3
-        versionName = "1.2"
+        versionCode = 4
+        versionName = "1.3"
     }
 
     // ABI splits: one installable-per-device APK per ABI + a universal APK.

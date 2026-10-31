@@ -14,7 +14,6 @@ import android.text.Editable
 import android.text.TextWatcher
 import android.view.MotionEvent
 import android.view.inputmethod.InputMethodManager
-import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ImageButton
 import android.widget.ProgressBar
@@ -414,7 +413,7 @@ class HomeActivity : AppCompatActivity() {
             tv.setPadding(28, 12, 28, 12)
             tv.setTextSize(13f)
             tv.setBackgroundResource(
-                if (active) R.drawable.bg_fab_red else R.drawable.bg_fab_dark,
+                if (active) R.drawable.bg_chip_red else R.drawable.bg_chip_dark,
             )
             tv.setTextColor(ContextCompat.getColor(this, if (active) android.R.color.white else R.color.text_secondary))
             tv.layoutParams = android.widget.LinearLayout.LayoutParams(
@@ -491,41 +490,26 @@ class HomeActivity : AppCompatActivity() {
             .show()
     }
 
-    /**
-     * Per-list membership chooser: checkboxes for every named list plus an
-     * optional "new list" field, applied to one video on Save.
-     */
+    /** Per-list membership chooser (shared pill-based dialog). */
     private fun favChooserDialog(video: VideoItem) {
-        val names = Watchlist.names(this)
-        val box = android.widget.LinearLayout(this)
-        box.orientation = android.widget.LinearLayout.VERTICAL
-        val pad = (16 * resources.displayMetrics.density).toInt()
-        box.setPadding(pad, pad / 2, pad, 0)
-        val checks = names.associateWith { CheckBox(this) }
-        val member = Watchlist.membership(this, video)
-        for ((name, cb) in checks) {
-            cb.text = name
-            cb.isChecked = name in member
-            cb.setTextColor(ContextCompat.getColor(this, R.color.text_primary))
-            box.addView(cb)
+        FavouritesUi.showChooser(this, video) {
+            if (tab == Tab.MYLIST) showFavourites()
+            else videoAdapter.rebuild()
         }
-        val input = EditText(this)
-        input.hint = "New list name (optional)"
-        box.addView(input)
-        AlertDialog.Builder(this)
-            .setTitle("Add to favourites")
-            .setView(box)
-            .setPositiveButton("Save") { _, _ ->
-                val wanted = checks.filter { it.value.isChecked }.keys.toMutableSet()
-                val newName = input.text.toString().trim()
-                if (newName.isNotEmpty() && Watchlist.create(this, newName)) {
-                    wanted.add(newName)
-                }
-                Watchlist.setMembership(this, video, wanted)
-                if (tab == Tab.MYLIST) showFavourites()
-            }
-            .setNegativeButton("Cancel", null)
-            .show()
+    }
+
+    /**
+     * Heart tap, used by every card/row: with more than one named list the
+     * tap opens the chooser (which list gets it?); with the single default
+     * list it stays a one-tap bookmark. Long-press always opens the chooser.
+     */
+    private fun heartTap(video: VideoItem, onToggled: (Boolean) -> Unit) {
+        if (Watchlist.names(this).size > 1) {
+            favChooserDialog(video)
+        } else {
+            val added = Watchlist.toggle(this, video)
+            onToggled(added)
+        }
     }
 
     // -------------------------------------------------------------- sort
@@ -669,6 +653,7 @@ class HomeActivity : AppCompatActivity() {
         const val TYPE_GROUP_HEADER = 4
         const val TYPE_GROUP_ROW = 5
         const val TYPE_VIDEO_LIST = 6
+        const val TYPE_GROUP_LIST = 7
 
         /** Home sort modes (Credentials.homeSort). */
         const val SORT_NEWEST = 0
@@ -1220,6 +1205,7 @@ class HomeActivity : AppCompatActivity() {
         val video: VideoItem? = null,
         val groupVideos: List<VideoItem>? = null,
         val listStyle: Boolean = false,
+        val listGroup: List<VideoItem>? = null,
     )
 
     class Cell(v: View) : RecyclerView.ViewHolder(v) {
@@ -1238,17 +1224,34 @@ class HomeActivity : AppCompatActivity() {
         private var rows: List<AdapterRow> = emptyList()
 
         /**
-         * Rebuilds the rows from [displayed]. Details-list view is always a
-         * flat list of rows. With the group toggle on (cards view),
-         * [displayed] is chat-consecutive and each chat becomes a small
-         * header + one full-width row of swipeable cards; otherwise the
-         * list is the flat 3-column grid.
+         * Rebuilds the rows from [displayed]. Details-list view is flat by
+         * default; with the group toggle on, each chat becomes a small
+         * header + one full-width vertical list of its detail rows (four in
+         * view, scrollable). Cards view groups into swipeable card rows.
          */
         fun rebuild() {
             val out = mutableListOf<AdapterRow>()
             if (Credentials.homeView(this@HomeActivity) == 1) {
-                // Details list: full file names, one row per video.
-                for (v in displayed) out.add(AdapterRow(video = v, listStyle = true))
+                if (Credentials.homeGroup(this@HomeActivity)) {
+                    // Grouped details: [displayed] is chat-consecutive, so
+                    // each run of one chatId becomes header + vertical list.
+                    var run = mutableListOf<VideoItem>()
+                    fun flush() {
+                        if (run.isNotEmpty()) {
+                            out.add(AdapterRow(header = run.first().chatTitle))
+                            out.add(AdapterRow(listGroup = run.toList()))
+                            run = mutableListOf()
+                        }
+                    }
+                    for (v in displayed) {
+                        if (run.isNotEmpty() && run.first().chatId != v.chatId) flush()
+                        run.add(v)
+                    }
+                    flush()
+                } else {
+                    // Flat details list: full file names, one row per video.
+                    for (v in displayed) out.add(AdapterRow(video = v, listStyle = true))
+                }
             } else if (Credentials.homeGroup(this@HomeActivity)) {
                 val groups = LinkedHashMap<Any, MutableList<VideoItem>>()
                 for (v in displayed) groups.getOrPut(v.chatId) { mutableListOf() }.add(v)
@@ -1272,6 +1275,7 @@ class HomeActivity : AppCompatActivity() {
             return when {
                 row.header != null -> TYPE_GROUP_HEADER
                 row.groupVideos != null -> TYPE_GROUP_ROW
+                row.listGroup != null -> TYPE_GROUP_LIST
                 row.listStyle -> TYPE_VIDEO_LIST
                 else -> TYPE_VIDEO
             }
@@ -1286,6 +1290,10 @@ class HomeActivity : AppCompatActivity() {
                 TYPE_GROUP_ROW -> GroupRowHolder(
                     LayoutInflater.from(parent.context)
                         .inflate(R.layout.item_chat_row, parent, false),
+                )
+                TYPE_GROUP_LIST -> GroupColHolder(
+                    LayoutInflater.from(parent.context)
+                        .inflate(R.layout.item_chat_col, parent, false),
                 )
                 TYPE_VIDEO_LIST -> ListHolder(
                     LayoutInflater.from(parent.context)
@@ -1304,6 +1312,9 @@ class HomeActivity : AppCompatActivity() {
                 is LabelHolder -> holder.tv.text = rows[position].header.orEmpty()
                 is GroupRowHolder -> holder.adapter.setItems(
                     rows[position].groupVideos.orEmpty(),
+                )
+                is GroupColHolder -> holder.adapter.setItems(
+                    rows[position].listGroup.orEmpty(),
                 )
                 is ListHolder -> bindVideoList(holder, rows.getOrNull(position)?.video ?: return)
                 is Cell -> bindVideo(holder, rows.getOrNull(position)?.video ?: return)
@@ -1346,9 +1357,10 @@ class HomeActivity : AppCompatActivity() {
         }
 
         holder.btnList.setOnClickListener {
-            val added = Watchlist.toggle(context, video)
-            renderRowListState(holder, added)
-            if (tab == Tab.MYLIST && !added) showFavourites()
+            heartTap(video) { added ->
+                renderRowListState(holder, added)
+                if (tab == Tab.MYLIST && !added) showFavourites()
+            }
         }
         holder.btnList.setOnLongClickListener {
             favChooserDialog(video)
@@ -1432,6 +1444,44 @@ class HomeActivity : AppCompatActivity() {
         }
     }
 
+    /** Holder of a per-chat VERTICAL detail list (grouped details view). */
+    inner class GroupColHolder(v: View) : RecyclerView.ViewHolder(v) {
+        val adapter = VerticalRowAdapter()
+
+        init {
+            val rv = v.findViewById<RecyclerView>(R.id.chatCol)
+            rv.layoutManager = LinearLayoutManager(
+                v.context,
+                LinearLayoutManager.VERTICAL,
+                false,
+            )
+            rv.adapter = adapter
+        }
+    }
+
+    /** Inner adapter of a chat's vertical detail list (grouped details). */
+    inner class VerticalRowAdapter : RecyclerView.Adapter<ListHolder>() {
+
+        private var videos: List<VideoItem> = emptyList()
+
+        fun setItems(list: List<VideoItem>) {
+            videos = list
+            notifyDataSetChanged()
+        }
+
+        override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ListHolder =
+            ListHolder(
+                LayoutInflater.from(parent.context)
+                    .inflate(R.layout.item_video_row, parent, false),
+            )
+
+        override fun getItemCount(): Int = videos.size
+
+        override fun onBindViewHolder(holder: ListHolder, position: Int) {
+            bindVideoList(holder, videos[position])
+        }
+    }
+
     /**
      * Binds a video card, in the flat grid or inside a swipeable chat row.
      * Shared by [VideoAdapter] and [HorizontalCardAdapter].
@@ -1463,9 +1513,10 @@ class HomeActivity : AppCompatActivity() {
         // exactly which named favourites lists get it.
         renderListState(holder, Watchlist.contains(context, video))
         holder.btnList.setOnClickListener {
-            val added = Watchlist.toggle(context, video)
-            renderListState(holder, added)
-            if (tab == Tab.MYLIST && !added) showFavourites()
+            heartTap(video) { added ->
+                renderListState(holder, added)
+                if (tab == Tab.MYLIST && !added) showFavourites()
+            }
         }
         holder.btnList.setOnLongClickListener {
             favChooserDialog(video)
