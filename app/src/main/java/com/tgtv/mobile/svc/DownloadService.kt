@@ -3,6 +3,7 @@ package com.tgtv.mobile.svc
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.app.Service
 import android.content.ContentValues
 import android.content.Context
@@ -32,8 +33,11 @@ import java.io.FileOutputStream
 class DownloadService : Service() {
 
     companion object {
-        private const val CHANNEL_ID = "downloads"
+        // v3: silent (LOW importance = no sound) but still plainly visible in
+        // the shade. v2 was DEFAULT and played an alert on every download.
+        private const val CHANNEL_ID = "downloads_v3"
         private const val NOTIF_ID = 42
+        private const val DONE_NOTIF_ID = 44
         private const val EXTRA_FILE_ID = "fileId"
         private const val EXTRA_MESSAGE_ID = "messageId"
         private const val EXTRA_SIZE = "size"
@@ -81,7 +85,8 @@ class DownloadService : Service() {
     override fun onCreate() {
         super.onCreate()
         nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-        // Notification channels only exist on API 26+
+        // Notification channels only exist on API 26+. LOW importance keeps
+        // the progress card visible in the shade but plays no sound.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             nm.createNotificationChannel(
                 NotificationChannel(CHANNEL_ID, "Video downloads", NotificationManager.IMPORTANCE_LOW),
@@ -107,12 +112,33 @@ class DownloadService : Service() {
 
     private fun notification(text: CharSequence, progress: Int, total: Int): Notification =
         NotificationCompat.Builder(this, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setSmallIcon(R.drawable.ic_download)
             .setContentTitle(getString(R.string.downloading))
             .setContentText(text)
             .setOngoing(true)
+            .setOnlyAlertOnce(true)
             .setProgress(total, progress, total == 0)
+            .setContentIntent(openApp())
             .build()
+
+    /** Sticks around after the service stops, so "complete" is actually seen. */
+    private fun doneNotification(text: CharSequence): Notification =
+        NotificationCompat.Builder(this, CHANNEL_ID)
+            .setSmallIcon(R.drawable.ic_download)
+            .setContentTitle(getString(R.string.download_complete))
+            .setContentText(text)
+            .setAutoCancel(true)
+            .setContentIntent(openApp())
+            .build()
+
+    /** Tapping the notification opens TGTV. */
+    private fun openApp(): PendingIntent? {
+        val i = packageManager.getLaunchIntentForPackage(packageName) ?: return null
+        return PendingIntent.getActivity(
+            this, 0, i,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+    }
 
     private fun update(text: CharSequence, progress: Int, total: Int) {
         nm.notify(NOTIF_ID, notification(text, progress, total))
@@ -135,7 +161,7 @@ class DownloadService : Service() {
             val file = TdLib.downloadFully(item.fileId, priority = 24)
             val src = file.local!!.path
             val dest = copyToMovies(src, item)
-            update(getString(R.string.download_complete) + " — $dest", 100, 100)
+            nm.notify(DONE_NOTIF_ID, doneNotification(dest))
 
             // Drop the managed download record; the cached copy stays until cleared
             TdLib.send(TdApi.RemoveFileFromDownloads(item.fileId, false))

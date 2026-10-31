@@ -10,6 +10,8 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
         android:maxSdkVersion="32" />
+    <!-- In-app OTA updates: install an APK downloaded from GitHub Releases. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
         android:name=".App"
@@ -43,5 +45,23 @@
             android:name=".svc.DownloadService"
             android:exported="false"
             android:foregroundServiceType="dataSync" />
+
+        <!-- OTA update APK download (GitHub Releases); foreground so the
+             transfer survives the app being backgrounded. -->
+        <service
+            android:name=".ota.UpdateService"
+            android:exported="false"
+            android:foregroundServiceType="dataSync" />
+
+        <!-- Serves the downloaded OTA update APK to the system installer. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

@@ -12,6 +12,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import com.tgtv.mobile.R
 import com.tgtv.mobile.model.ChatSelection
+import com.tgtv.mobile.ota.UpdateManager
+import com.tgtv.mobile.ota.Updater
 import com.tgtv.mobile.td.Credentials
 import com.tgtv.mobile.td.TdLib
 import kotlinx.coroutines.Dispatchers
@@ -38,8 +40,22 @@ class SettingsActivity : AppCompatActivity() {
         findViewById<View>(R.id.btnCacheRetention).setOnClickListener { retentionDialog() }
         findViewById<View>(R.id.btnClearCache).setOnClickListener { clearCache() }
         findViewById<View>(R.id.btnSignOut).setOnClickListener { signOut() }
+        findViewById<View>(R.id.btnCheckUpdates).setOnClickListener { onUpdateRow() }
         findViewById<ImageButton>(R.id.btnBackIcon).setOnClickListener { finish() }
         fillRows()
+        // Live view of the process-wide update state; the check itself keeps
+        // running in UpdateManager even if this screen is left.
+        lifecycleScope.launch {
+            UpdateManager.state.collect { renderUpdate(it) }
+        }
+        UpdateManager.check(this)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        // Coming back from the "Install unknown apps" page: if the user just
+        // granted it, launch the installer right away.
+        UpdateManager.resumeInstall(this)
     }
 
     /** Fills the per-row subtitle lines with live state. */
@@ -378,6 +394,48 @@ class SettingsActivity : AppCompatActivity() {
             }
             .setNegativeButton("Cancel", null)
             .show()
+    }
+
+    // ------------------------------------------------------------- updates
+
+    /** The update row mirrors the process-wide update state. */
+    private fun renderUpdate(st: UpdateManager.UpdateState) {
+        val sub = findViewById<TextView>(R.id.txtUpdateSub)
+        sub.text = when (st.phase) {
+            UpdateManager.Phase.IDLE -> "Check GitHub for a new version"
+            UpdateManager.Phase.CHECKING -> "Checking…"
+            UpdateManager.Phase.UP_TO_DATE ->
+                "You're on the latest version (v${Updater.installedVersion(this)})"
+            UpdateManager.Phase.AVAILABLE -> "v${st.tag} available — tap to download & install"
+            UpdateManager.Phase.DOWNLOADING -> "Downloading… ${st.progress}%"
+            UpdateManager.Phase.READY -> "v${st.tag} ready — tap to install"
+            UpdateManager.Phase.FAILED -> "Download failed — tap to retry"
+        }
+    }
+
+    /**
+     * The row is stateful: each phase advances on the next tap — check,
+     * download, install — and the download keeps running in the background
+     * even if this screen is closed.
+     */
+    private fun onUpdateRow() {
+        when (UpdateManager.state.value.phase) {
+            UpdateManager.Phase.READY -> {
+                val sub = findViewById<TextView>(R.id.txtUpdateSub)
+                when (UpdateManager.install(this)) {
+                    // APK stays on disk + state stays READY: a failed install
+                    // is retried with a tap, never with a re-download.
+                    Updater.InstallResult.NEEDS_PERMISSION ->
+                        sub.text = "Allow \u201CInstall unknown apps\u201D for TGTV, then tap again"
+                    Updater.InstallResult.FAILED ->
+                        sub.text = "Couldn't open the installer — tap to try again"
+                    else -> Unit
+                }
+            }
+            UpdateManager.Phase.AVAILABLE -> UpdateManager.download(this)
+            UpdateManager.Phase.CHECKING, UpdateManager.Phase.DOWNLOADING -> Unit
+            else -> UpdateManager.check(this)
+        }
     }
 
     // -------------------------------------------------------- sign out

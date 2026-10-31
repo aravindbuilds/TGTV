@@ -27,7 +27,9 @@ Brought to you by the maker of [TelegramVideoTV](https://github.com/aravindbuild
 - **🔍 Automatic metadata** — titles are matched against TMDB for posters, backdrops, ratings, runtimes, genres, story lines and cast photos (bring your own free TMDB key)
 - **⏯️ Resume & Continue Watching** — pick up exactly where you left off, on any file, with per-title progress tracking
 - **⚡ True streaming** — watch instantly via TDLib's in-process downloader; files never have to fully download first
-- **⬇️ Downloads** — save any video to your gallery or a folder of your choice, with progress notifications
+- **⬇️ Downloads** — save any video to your gallery or a folder of your choice, with silent progress notifications
+- **🔄 Self-updating (OTA)** — TGTV checks GitHub Releases on launch and offers new versions in-app; downloads keep running in a foreground service even if you leave the app, and a failed install is retried without re-downloading anything
+- **💬 Group by chat** — browse your library per chat with swipeable card rows, or one flat grid with sort options (newest, oldest, A–Z, largest)
 - **💬 Group by chat** — browse your library per chat with swipeable card rows, or one flat grid with sort options (newest, oldest, A–Z, largest)
 - **💬 Subtitles** — built-in Telegram subtitles plus automatic OpenSubtitles.com lookup by hash
 - **🎞️ Player built for movies** — ExoPlayer with speed control, aspect-ratio modes, subtitle styling, gesture seek and auto-hiding controls
@@ -36,7 +38,19 @@ Brought to you by the maker of [TelegramVideoTV](https://github.com/aravindbuild
 
 ## 📲 Download
 
-Grab the latest APK from [**Releases**](../../releases) — install, log in with your Telegram API credentials, and your library builds itself.
+Grab the latest APK from [**Releases**](../../releases) — install, log in with your Telegram API credentials, and your library builds itself. After that, TGTV keeps itself up to date: when a new release is published, the app offers it on the next launch, downloads it in the background (with a silent progress notification), and hands it to the system installer. On Android 8+ you'll be asked once to allow **Install unknown apps** for TGTV — after that, updates install themselves.
+
+### Publishing a new release (for maintainers)
+
+1. Bump `versionName` (and `versionCode`) in `app/build.gradle.kts`.
+2. Build the APK, then push a tag and attach the asset:
+
+```bash
+git tag v1.1 && git push origin v1.1
+gh release create v1.1 --title "TGTV v1.1" --notes "..." TGTV-v1.1.apk
+```
+
+Installed apps pick the new version up automatically via the in-app updater.
 
 ## 🚀 Getting started
 

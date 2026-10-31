@@ -37,6 +37,8 @@ import com.tgtv.mobile.model.VideoItem
 import com.tgtv.mobile.model.VideoMapper
 import com.tgtv.mobile.model.WatchProgress
 import com.tgtv.mobile.model.Watchlist
+import com.tgtv.mobile.ota.UpdateManager
+import com.tgtv.mobile.ota.Updater
 import com.tgtv.mobile.td.Credentials
 import com.tgtv.mobile.td.TdError
 import com.tgtv.mobile.td.TdLib
@@ -46,6 +48,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import org.drinkless.tdlib.TdApi
@@ -204,6 +207,7 @@ class HomeActivity : AppCompatActivity() {
         TdLib.addListener(videoUpdateListener)
         showHome()
         refresh()
+        autoCheckUpdates()
     }
 
     override fun onDestroy() {
@@ -211,8 +215,95 @@ class HomeActivity : AppCompatActivity() {
         super.onDestroy()
     }
 
+    // ------------------------------------------------------------ updates
+
+    /** True once this process has done its silent launch-time check. */
+    private var updateOfferShown = false
+    private var updateDlg: AlertDialog? = null
+
+    /**
+     * Silent update check on Home launch - once per process, so it never
+     * nags. Mirrors the process-wide UpdateManager state: an available
+     * release gets an offer dialog; a download started here shows progress
+     * and hands off to the installer when done. Leaving this screen never
+     * interrupts the download (it lives in UpdateManager, not here).
+     */
+    private fun autoCheckUpdates() {
+        android.util.Log.d("UpdateManager", "autoCheckUpdates: entry (checked=${HomeActivity.autoUpdateChecked})")
+        // Every instance observes the shared state, so the offer always lands
+        // on the Home that is actually on screen; only the silent check is
+        // done once per process.
+        lifecycleScope.launch {
+            UpdateManager.state.collect { st ->
+                when (st.phase) {
+                    UpdateManager.Phase.AVAILABLE -> if (!updateOfferShown) {
+                        updateOfferShown = true
+                        showUpdateOffer(st.tag)
+                    }
+                    UpdateManager.Phase.DOWNLOADING -> updateDlg?.let { dlg ->
+                        dlg.setTitle("Downloading update")
+                        dlg.setMessage("TGTV v${st.tag} — ${st.progress}%")
+                    }
+                    UpdateManager.Phase.READY -> {
+                        updateDlg?.dismiss()
+                        updateDlg = null
+                        when (UpdateManager.install(this@HomeActivity)) {
+                            // NEEDS_PERMISSION / FAILED keep the APK and stay
+                            // READY - the user retries the install only, the
+                            // download is never repeated.
+                            Updater.InstallResult.NEEDS_PERMISSION -> Toast.makeText(
+                                this@HomeActivity,
+                                "Allow \u201CInstall unknown apps\u201D for TGTV, then install again from Settings.",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                            Updater.InstallResult.FAILED -> Toast.makeText(
+                                this@HomeActivity,
+                                "Couldn't open the installer - try again from Settings.",
+                                Toast.LENGTH_LONG,
+                            ).show()
+                            else -> Unit
+                        }
+                    }
+                    UpdateManager.Phase.FAILED -> {
+                        updateDlg?.setCancelable(true)
+                        updateDlg?.setMessage("Download failed — check your connection and try again from Settings.")
+                        updateDlg = null
+                    }
+                    else -> Unit
+                }
+            }
+        }
+        if (HomeActivity.autoUpdateChecked) return
+        HomeActivity.autoUpdateChecked = true
+        // The network stack (especially DNS) can still be coming up seconds
+        // after launch; retry a failed check a couple of times before giving
+        // up quietly for this process.
+        lifecycleScope.launch {
+            repeat(3) {
+                UpdateManager.check(this@HomeActivity)
+                UpdateManager.state.first { it.phase != UpdateManager.Phase.CHECKING }
+                if (UpdateManager.state.value.phase != UpdateManager.Phase.FAILED) return@launch
+                delay(5_000)
+            }
+        }
+    }
+
+    /** Offer dialog for a newly found release; Download starts the transfer. */
+    private fun showUpdateOffer(tag: String) {
+        if (isFinishing || isDestroyed) return
+        updateDlg = AlertDialog.Builder(this)
+            .setTitle("Update available")
+            .setMessage("TGTV v$tag is ready to install.")
+            .setPositiveButton("Download") { _, _ -> UpdateManager.download(this) }
+            .setNegativeButton("Later", null)
+            .show()
+    }
+
     override fun onResume() {
         super.onResume()
+        // Coming back from the "Install unknown apps" page: if the user just
+        // granted it, launch the installer right away.
+        UpdateManager.resumeInstall(this)
         // Settings may have changed the streaming dir or the picked chats;
         // My List may have been edited in Details. Refresh accordingly.
         if (!loading.get()) {
@@ -428,6 +519,9 @@ class HomeActivity : AppCompatActivity() {
         /** Set by ChatSelectActivity; the next onResume reloads the library. */
         @Volatile
         var chatsChanged = false
+
+        /** True once this process has done its silent launch-time update check. */
+        var autoUpdateChecked = false
     }
 
     /** Crossfades the featured video around the screen. */

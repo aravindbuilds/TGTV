@@ -175,11 +175,17 @@ class LoginActivity : AppCompatActivity() {
     /** Composed phone in full international form: "+919876543210". */
     private fun fullPhone(): String = dialCode + phone.text.toString().trim().filter { it.isDigit() }
 
+    /** Guards openNextScreen: the auth collector and the cold-start poll can
+     *  both see Ready; navigating twice stacks a second Home instance. */
+    private var navigated = false
+
     /**
      * After sign-in: first run goes to the chat picker (choose which chats
      * feed the library), later runs straight to the home screen.
      */
     private fun openNextScreen() {
+        if (navigated) return
+        navigated = true
         val target = if (ChatSelection.isConfigured(this)) HomeActivity::class.java
         else ChatSelectActivity::class.java
         startActivity(Intent(this@LoginActivity, target))
