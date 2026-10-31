@@ -1456,6 +1456,9 @@ class HomeActivity : AppCompatActivity() {
                 false,
             )
             rv.adapter = adapter
+            // Vertical list inside a vertical grid: the gesture claim lives
+            // in MaxHeightRecyclerView.dispatchTouchEvent (an OnTouchListener
+            // is skipped while the view is disabled and can't be relied on).
         }
     }
 

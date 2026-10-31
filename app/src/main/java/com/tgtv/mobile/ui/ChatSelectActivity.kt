@@ -160,6 +160,11 @@ class ChatSelectActivity : AppCompatActivity() {
                 Row(chat, typeLabel(chat), subLine(chat), checked)
             },
         )
+        // Selected chats first, each group still newest-activity first.
+        rows.sortWith(
+            compareByDescending<Row> { it.checked }
+                .thenByDescending { it.chat.lastMessage?.date ?: 0 },
+        )
         // Bot sessions only learn about chats through activity - explain.
         findViewById<TextView>(R.id.txtHint).visibility =
             if (isUser || rows.isEmpty()) View.GONE else View.VISIBLE
